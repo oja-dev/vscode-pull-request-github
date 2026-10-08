@@ -66,10 +66,13 @@ describe('Reviewed line commands', function () {
 		sandbox.restore();
 	});
 
-	it('highlights whole lines with a theme color without fading the text', function () {
+	it('marks whole lines with a theme background and left border without fading text', function () {
 		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
 		assert.deepStrictEqual(createDecoration.firstCall.args, [{
 			backgroundColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBackground'),
+			borderColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBorder'),
+			borderStyle: 'solid',
+			borderWidth: '0 0 0 3px',
 			isWholeLine: true
 		}]);
 	});

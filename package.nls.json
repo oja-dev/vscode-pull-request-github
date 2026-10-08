@@ -469,5 +469,6 @@
 	"languageModelTools.github-pull-request_resolveReviewThread.description": "Resolve a review thread on the active GitHub pull request.",
 	"languageModelTools.github-pull-request_create_pull_request.displayName": "Create a GitHub pull request",
 	"languageModelTools.github-pull-request_create_pull_request.description": "Create a new GitHub pull request with a title, head branch, and optional body, base branch, and draft flag.",
-	"githubPullRequests.reviewedLineBackground.description": "Background color for reviewed lines in pull request diffs. Use a transparent color to preserve diff highlighting."
+	"githubPullRequests.reviewedLineBackground.description": "Background color for reviewed lines in pull request diffs. Use a transparent color to preserve diff highlighting.",
+	"githubPullRequests.reviewedLineBorder.description": "Color of the left border marking reviewed lines in pull request diffs."
 }

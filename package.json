@@ -3886,6 +3886,16 @@
 				"description": "%githubPullRequests.reviewedLineBackground.description%"
 			},
 			{
+				"id": "githubPullRequests.reviewedLineBorder",
+				"defaults": {
+					"dark": "#A78BFA",
+					"light": "#6D28D9",
+					"highContrast": "editor.foreground",
+					"highContrastLight": "editor.foreground"
+				},
+				"description": "%githubPullRequests.reviewedLineBorder.description%"
+			},
+			{
 				"id": "issues.newIssueDecoration",
 				"defaults": {
 					"dark": "#ffffff48",

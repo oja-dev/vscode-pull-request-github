@@ -11,6 +11,9 @@ import { fromPRUri, Schemes } from '../common/uri';
 export function registerReviewedLines(context: vscode.ExtensionContext): void {
 	const decoration = vscode.window.createTextEditorDecorationType({
 		backgroundColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBackground'),
+		borderColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBorder'),
+		borderStyle: 'solid',
+		borderWidth: '0 0 0 3px',
 		isWholeLine: true
 	});
 	let pending: Promise<void> = Promise.resolve();
