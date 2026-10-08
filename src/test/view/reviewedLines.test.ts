@@ -66,6 +66,14 @@ describe('Reviewed line commands', function () {
 		sandbox.restore();
 	});
 
+	it('highlights whole lines with a theme color without fading the text', function () {
+		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
+		assert.deepStrictEqual(createDecoration.firstCall.args, [{
+			backgroundColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBackground'),
+			isWholeLine: true
+		}]);
+	});
+
 	it('marks reversed selections excluding a column-zero end, and unmarks selected lines', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(4, 0, 1, 3)];

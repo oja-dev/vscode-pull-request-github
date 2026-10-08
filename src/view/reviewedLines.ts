@@ -9,7 +9,10 @@ import { fromPRUri, Schemes } from '../common/uri';
 
 /** Local progress for immutable PR diff documents; never changes GitHub's file-viewed state. */
 export function registerReviewedLines(context: vscode.ExtensionContext): void {
-	const decoration = vscode.window.createTextEditorDecorationType({ opacity: '0.5', isWholeLine: true });
+	const decoration = vscode.window.createTextEditorDecorationType({
+		backgroundColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBackground'),
+		isWholeLine: true
+	});
 	let pending: Promise<void> = Promise.resolve();
 
 	function keyFor(editor: vscode.TextEditor): string | undefined {

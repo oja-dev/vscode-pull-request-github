@@ -3876,6 +3876,16 @@
 		},
 		"colors": [
 			{
+				"id": "githubPullRequests.reviewedLineBackground",
+				"defaults": {
+					"dark": "#A78BFA26",
+					"light": "#8B5CF626",
+					"highContrast": "#A78BFA40",
+					"highContrastLight": "#6D28D940"
+				},
+				"description": "%githubPullRequests.reviewedLineBackground.description%"
+			},
+			{
 				"id": "issues.newIssueDecoration",
 				"defaults": {
 					"dark": "#ffffff48",
