@@ -1,4 +1,6 @@
 {
+	"command.markSelectedLinesReviewed": "Mark Selected Lines as Reviewed",
+	"command.markSelectedLinesUnreviewed": "Mark Selected Lines as Unreviewed",
 	"displayName": "GitHub Pull Requests",
 	"description": "Pull Request and Issue Provider for GitHub",
 	"githubPullRequests.pullRequestDescription.description": "The description used when creating pull requests.",

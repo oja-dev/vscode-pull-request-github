@@ -1030,6 +1030,18 @@
 		},
 		"commands": [
 			{
+				"command": "pr.markSelectedLinesReviewed",
+				"title": "%command.markSelectedLinesReviewed%",
+				"category": "%command.pull.request.category%",
+				"enablement": "resourceScheme == pr"
+			},
+			{
+				"command": "pr.markSelectedLinesUnreviewed",
+				"title": "%command.markSelectedLinesUnreviewed%",
+				"category": "%command.pull.request.category%",
+				"enablement": "resourceScheme == pr"
+			},
+			{
 				"command": "github.api.preloadPullRequest",
 				"title": "Preload Pull Request",
 				"category": "%command.pull.request.category%"
@@ -2143,6 +2155,14 @@
 		],
 		"menus": {
 			"commandPalette": [
+				{
+					"command": "pr.markSelectedLinesReviewed",
+					"when": "resourceScheme == pr"
+				},
+				{
+					"command": "pr.markSelectedLinesUnreviewed",
+					"when": "resourceScheme == pr"
+				},
 				{
 					"command": "pr.deleteLocalBranchesNRemotes",
 					"when": "!isSessionsWindow"
@@ -3570,6 +3590,16 @@
 				}
 			],
 			"editor/context": [
+				{
+					"command": "pr.markSelectedLinesReviewed",
+					"when": "resourceScheme == pr",
+					"group": "2_git@7"
+				},
+				{
+					"command": "pr.markSelectedLinesUnreviewed",
+					"when": "resourceScheme == pr",
+					"group": "2_git@8"
+				},
 				{
 					"command": "review.createSuggestionFromChange",
 					"when": "(activeEditor == workbench.editors.textDiffEditor && (resourcePath in github:unviewedFiles || resourcePath in github:viewedFiles)) && !isSessionsWindow",
