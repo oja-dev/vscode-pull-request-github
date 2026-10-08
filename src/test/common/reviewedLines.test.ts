@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { default as assert } from 'assert';
-import { ReviewedLineRange, reviewedLinesKey, updateReviewedLines } from '../../common/reviewedLines';
+import { LineRange, getReviewedLinesKey, updateReviewedLines } from '../../common/reviewedLines';
 
 describe('Reviewed line ranges', function () {
 	it('marks the first line of an empty file review', function () {
@@ -75,8 +75,8 @@ describe('Reviewed line ranges', function () {
 
 	for (const reviewed of [true, false]) {
 		it(`does not mutate input arrays or tuples when ${reviewed ? 'marking' : 'unmarking'} lines`, function () {
-			const current: ReviewedLineRange[] = [[8, 10], [0, 5]];
-			const selections: ReviewedLineRange[] = [[4, 9], [2, 3]];
+			const current: LineRange[] = [[8, 10], [0, 5]];
+			const selections: LineRange[] = [[4, 9], [2, 3]];
 			current.forEach(range => Object.freeze(range));
 			selections.forEach(range => Object.freeze(range));
 			Object.freeze(current);
@@ -98,30 +98,30 @@ describe('Reviewed line storage keys', function () {
 	const file = 'src/example.ts';
 
 	it('returns a stable key for the same review context', function () {
-		assert.strictEqual(reviewedLinesKey(pr, head, file, false), reviewedLinesKey(pr, head, file, false));
+		assert.strictEqual(getReviewedLinesKey(pr, head, file, false), getReviewedLinesKey(pr, head, file, false));
 	});
 
 	it('isolates pull requests, revisions, files, and diff sides', function () {
 		const keys = [
-			reviewedLinesKey(pr, head, file, false),
-			reviewedLinesKey('https://github.com/owner/repository/pull/2', head, file, false),
-			reviewedLinesKey('https://github.com/owner/another-repository/pull/1', head, file, false),
-			reviewedLinesKey(pr, 'new-head-sha', file, false),
-			reviewedLinesKey(pr, head, 'src/other.ts', false),
-			reviewedLinesKey(pr, head, file, true),
+			getReviewedLinesKey(pr, head, file, false),
+			getReviewedLinesKey('https://github.com/owner/repository/pull/2', head, file, false),
+			getReviewedLinesKey('https://github.com/owner/another-repository/pull/1', head, file, false),
+			getReviewedLinesKey(pr, 'new-head-sha', file, false),
+			getReviewedLinesKey(pr, head, 'src/other.ts', false),
+			getReviewedLinesKey(pr, head, file, true),
 		];
 
 		assert.strictEqual(new Set(keys).size, keys.length);
 	});
 
 	it('isolates base revisions without discarding unchanged head-side progress', function () {
-		assert.notStrictEqual(reviewedLinesKey(pr, head, file, true, 'base-1'), reviewedLinesKey(pr, head, file, true, 'base-2'));
-		assert.strictEqual(reviewedLinesKey(pr, head, file, false, 'base-1'), reviewedLinesKey(pr, head, file, false, 'base-2'));
+		assert.notStrictEqual(getReviewedLinesKey(pr, head, file, true, 'base-1'), getReviewedLinesKey(pr, head, file, true, 'base-2'));
+		assert.strictEqual(getReviewedLinesKey(pr, head, file, false, 'base-1'), getReviewedLinesKey(pr, head, file, false, 'base-2'));
 	});
 
 	it('keeps field boundaries unambiguous when identifiers contain separators', function () {
-		assert.notStrictEqual(reviewedLinesKey('owner:repo', 'head', 'file.ts', false), reviewedLinesKey('owner', 'repo:head', 'file.ts', false));
-		assert.notStrictEqual(reviewedLinesKey('pr', 'head:file', 'name.ts', false), reviewedLinesKey('pr', 'head', 'file:name.ts', false));
-		assert.notStrictEqual(reviewedLinesKey('pr', 'head', 'a","b.ts', false), reviewedLinesKey('pr', 'head', 'a,b.ts', false));
+		assert.notStrictEqual(getReviewedLinesKey('owner:repo', 'head', 'file.ts', false), getReviewedLinesKey('owner', 'repo:head', 'file.ts', false));
+		assert.notStrictEqual(getReviewedLinesKey('pr', 'head:file', 'name.ts', false), getReviewedLinesKey('pr', 'head', 'file:name.ts', false));
+		assert.notStrictEqual(getReviewedLinesKey('pr', 'head', 'a","b.ts', false), getReviewedLinesKey('pr', 'head', 'a,b.ts', false));
 	});
 });

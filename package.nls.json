@@ -1,6 +1,4 @@
 {
-	"command.markSelectedLinesReviewed": "Mark Selected Lines as Reviewed",
-	"command.markSelectedLinesUnreviewed": "Mark Selected Lines as Unreviewed",
 	"displayName": "GitHub Pull Requests",
 	"description": "Pull Request and Issue Provider for GitHub",
 	"githubPullRequests.pullRequestDescription.description": "The description used when creating pull requests.",
@@ -293,6 +291,8 @@
 	"command.pr.refreshActivePullRequest.title": "Refresh",
 	"command.pr.markFileAsViewed.title": "Mark File As Viewed",
 	"command.pr.unmarkFileAsViewed.title": "Mark File As Not Viewed",
+	"command.pr.markSelectedLinesReviewed.title": "Mark Selected Lines as Reviewed",
+	"command.pr.markSelectedLinesUnreviewed.title": "Mark Selected Lines as Unreviewed",
 	"command.pr.openReview.title": "Go to Review",
 	"command.pr.collapseAllComments.title": "Collapse All Comments",
 	"command.comments.category": "Comments",

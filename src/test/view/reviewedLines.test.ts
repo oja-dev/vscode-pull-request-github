@@ -6,7 +6,7 @@
 import { default as assert } from 'assert';
 import { createSandbox, SinonSandbox, SinonStub } from 'sinon';
 import * as vscode from 'vscode';
-import { ReviewedLineRange, reviewedLinesKey } from '../../common/reviewedLines';
+import { LineRange, getReviewedLinesKey } from '../../common/reviewedLines';
 import { Schemes } from '../../common/uri';
 import { registerReviewedLines } from '../../view/reviewedLines';
 import { InMemoryMemento } from '../mocks/inMemoryMemento';
@@ -21,7 +21,7 @@ describe('Reviewed line commands', function () {
 	let visibleEditors: vscode.TextEditor[];
 	let visibleEditorsChanged: vscode.EventEmitter<readonly vscode.TextEditor[]>;
 	let decoration: vscode.TextEditorDecorationType;
-	const key = reviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', false);
+	const key = getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', false);
 
 	function createEditor(uri = prUri(), selections = [new vscode.Selection(0, 0, 0, 0)]): vscode.TextEditor {
 		return {
@@ -31,7 +31,7 @@ describe('Reviewed line commands', function () {
 		} as unknown as vscode.TextEditor;
 	}
 
-	function assertDecorations(editor: vscode.TextEditor, ranges: ReviewedLineRange[]): void {
+	function assertDecorations(editor: vscode.TextEditor, ranges: LineRange[]): void {
 		const setDecorations = editor.setDecorations as SinonStub;
 		assert.deepStrictEqual(setDecorations.lastCall.args, [
 			decoration,
@@ -193,9 +193,9 @@ describe('Reviewed line commands', function () {
 		await commands.executeCommand('pr.markSelectedLinesReviewed');
 
 		assert.deepStrictEqual(state.get(key), [[1, 1]]);
-		assert.deepStrictEqual(state.get(reviewedLinesKey('owner/repo#1', 'next-head', 'src/main.ts', false)), [[4, 4]]);
-		assert.deepStrictEqual(state.get(reviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'base')), [[6, 6]]);
-		assert.deepStrictEqual(state.get(reviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'next-base')), [[8, 8]]);
+		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'next-head', 'src/main.ts', false)), [[4, 4]]);
+		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'base')), [[6, 6]]);
+		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'next-base')), [[8, 8]]);
 		assertDecorations(headEditor, [[1, 1]]);
 		assertDecorations(nextHeadEditor, [[4, 4]]);
 		assertDecorations(baseEditor, [[6, 6]]);
