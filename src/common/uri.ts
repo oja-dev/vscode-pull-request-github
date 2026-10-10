@@ -33,7 +33,6 @@ export function fromReviewUri(query: string): ReviewUriParams {
 }
 
 export interface PRUriParams {
-	prIdentifier?: string;
 	baseCommit: string;
 	headCommit: string;
 	isBase: boolean;
@@ -469,7 +468,6 @@ export function toPRUri(
 	previousFileName?: string
 ): vscode.Uri {
 	const params: PRUriParams = {
-		prIdentifier: createPRNodeIdentifier(pullRequestModel),
 		baseCommit: baseCommit,
 		headCommit: headCommit,
 		isBase: base,

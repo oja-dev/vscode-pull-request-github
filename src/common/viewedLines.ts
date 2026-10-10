@@ -3,12 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Uri } from 'vscode';
+import type { PRUriParams } from './uri';
+
 /** Inclusive, zero-based line numbers. */
 export type LineRange = [start: number, end: number];
 
-export function getViewedLinesKey(prIdentifier: string, headCommit: string, fileName: string, isBase: boolean, baseCommit?: string): string {
-	// Keep the original storage prefix so existing local progress survives the rename.
-	return `reviewedLines:${JSON.stringify([prIdentifier, headCommit, fileName, isBase, isBase ? baseCommit : undefined])}`;
+export function getViewedLinesKey(uri: Pick<Uri, 'authority' | 'path'>, params: Pick<PRUriParams, 'remoteName' | 'prNumber' | 'headCommit' | 'fileName' | 'isBase' | 'baseCommit'>): string {
+	return `viewedLines:${JSON.stringify([
+		uri.authority, uri.path, params.remoteName, params.prNumber,
+		params.headCommit, params.fileName, params.isBase, params.isBase ? params.baseCommit : undefined
+	])}`;
 }
 
 /** Merge marked ranges, or remove selected lines (splitting existing ranges when needed). */

@@ -93,36 +93,36 @@ describe('Viewed line ranges', function () {
 });
 
 describe('Viewed line storage keys', function () {
-	const pr = 'https://github.com/owner/repository/pull/1';
-	const head = 'head-sha';
-	const file = 'src/example.ts';
+	const uri = { authority: 'host', path: '/workspace/repo/src/example.ts' };
+	const params = { remoteName: 'origin', prNumber: 1, headCommit: 'head-sha', fileName: 'src/example.ts', isBase: false, baseCommit: 'base-sha' };
 
-	it('preserves the historical storage key for existing local progress', function () {
-		assert.strictEqual(getViewedLinesKey(pr, head, file, false), 'reviewedLines:["https://github.com/owner/repository/pull/1","head-sha","src/example.ts",false,null]');
-		assert.strictEqual(getViewedLinesKey(pr, head, file, true, 'base-sha'), 'reviewedLines:["https://github.com/owner/repository/pull/1","head-sha","src/example.ts",true,"base-sha"]');
+	it('stores only the explicit PR document identity', function () {
+		assert.strictEqual(getViewedLinesKey(uri, params), 'viewedLines:["host","/workspace/repo/src/example.ts","origin",1,"head-sha","src/example.ts",false,null]');
 	});
 
-	it('isolates pull requests, revisions, files, and diff sides', function () {
+	it('isolates authorities, roots, remotes, pull requests, revisions, files, and diff sides', function () {
 		const keys = [
-			getViewedLinesKey(pr, head, file, false),
-			getViewedLinesKey('https://github.com/owner/repository/pull/2', head, file, false),
-			getViewedLinesKey('https://github.com/owner/another-repository/pull/1', head, file, false),
-			getViewedLinesKey(pr, 'new-head-sha', file, false),
-			getViewedLinesKey(pr, head, 'src/other.ts', false),
-			getViewedLinesKey(pr, head, file, true),
+			getViewedLinesKey(uri, params),
+			getViewedLinesKey({ ...uri, authority: 'other-host' }, params),
+			getViewedLinesKey({ ...uri, path: '/workspace/other-repo/src/example.ts' }, params),
+			getViewedLinesKey(uri, { ...params, remoteName: 'upstream' }),
+			getViewedLinesKey(uri, { ...params, prNumber: 2 }),
+			getViewedLinesKey(uri, { ...params, headCommit: 'new-head' }),
+			getViewedLinesKey(uri, { ...params, fileName: 'src/other.ts' }),
+			getViewedLinesKey(uri, { ...params, isBase: true }),
 		];
 
 		assert.strictEqual(new Set(keys).size, keys.length);
 	});
 
 	it('isolates base revisions without discarding unchanged head-side progress', function () {
-		assert.notStrictEqual(getViewedLinesKey(pr, head, file, true, 'base-1'), getViewedLinesKey(pr, head, file, true, 'base-2'));
-		assert.strictEqual(getViewedLinesKey(pr, head, file, false, 'base-1'), getViewedLinesKey(pr, head, file, false, 'base-2'));
+		assert.notStrictEqual(getViewedLinesKey(uri, { ...params, isBase: true }), getViewedLinesKey(uri, { ...params, isBase: true, baseCommit: 'new-base' }));
+		assert.strictEqual(getViewedLinesKey(uri, params), getViewedLinesKey(uri, { ...params, baseCommit: 'new-base' }));
 	});
 
-	it('keeps field boundaries unambiguous when identifiers contain separators', function () {
-		assert.notStrictEqual(getViewedLinesKey('owner:repo', 'head', 'file.ts', false), getViewedLinesKey('owner', 'repo:head', 'file.ts', false));
-		assert.notStrictEqual(getViewedLinesKey('pr', 'head:file', 'name.ts', false), getViewedLinesKey('pr', 'head', 'file:name.ts', false));
-		assert.notStrictEqual(getViewedLinesKey('pr', 'head', 'a","b.ts', false), getViewedLinesKey('pr', 'head', 'a,b.ts', false));
+	it('keeps field boundaries unambiguous when values contain separators', function () {
+		assert.notStrictEqual(getViewedLinesKey({ authority: 'host:path', path: 'file' }, params), getViewedLinesKey({ authority: 'host', path: 'path:file' }, params));
+		assert.notStrictEqual(getViewedLinesKey(uri, { ...params, headCommit: 'head:file', fileName: 'name.ts' }), getViewedLinesKey(uri, { ...params, headCommit: 'head', fileName: 'file:name.ts' }));
+		assert.notStrictEqual(getViewedLinesKey(uri, { ...params, fileName: 'a","b.ts' }), getViewedLinesKey(uri, { ...params, fileName: 'a,b.ts' }));
 	});
 });

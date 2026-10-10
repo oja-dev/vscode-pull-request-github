@@ -35,8 +35,8 @@ export function registerViewedLines(context: vscode.ExtensionContext): void {
 			return;
 		}
 		const params = fromPRUri(editor.document.uri);
-		if (params?.prIdentifier && params.headCommit) {
-			return getViewedLinesKey(params.prIdentifier, params.headCommit, params.fileName, params.isBase, params.baseCommit);
+		if (params?.remoteName && params.headCommit && Number.isInteger(params.prNumber) && params.prNumber > 0) {
+			return getViewedLinesKey(editor.document.uri, params);
 		}
 	}
 

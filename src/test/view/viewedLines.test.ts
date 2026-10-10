@@ -6,8 +6,9 @@
 import { default as assert } from 'assert';
 import { createSandbox, SinonSandbox, SinonStub } from 'sinon';
 import * as vscode from 'vscode';
+import { GitChangeType } from '../../common/file';
 import { LineRange } from '../../common/viewedLines';
-import { Schemes } from '../../common/uri';
+import { PRUriParams, Schemes } from '../../common/uri';
 import { registerViewedLines } from '../../view/viewedLines';
 import { InMemoryMemento } from '../mocks/inMemoryMemento';
 import { MockCommandRegistry } from '../mocks/mockCommandRegistry';
@@ -24,7 +25,7 @@ describe('Viewed line commands', function () {
 	let viewedLinesEnabled: boolean | undefined;
 	let markerColor: unknown;
 	let decoration: vscode.TextEditorDecorationType;
-	const key = 'reviewedLines:["owner/repo#1","head","src/main.ts",false,null]';
+	const key = 'viewedLines:["","/src/main.ts","origin",1,"head","src/main.ts",false,null]';
 
 	function createEditor(uri = prUri(), selections = [new vscode.Selection(0, 0, 0, 0)], lineCount = 100): vscode.TextEditor {
 		return {
@@ -328,6 +329,10 @@ describe('Viewed line commands', function () {
 			prUri().with({ query: '{invalid' }),
 			prUri().with({ query: JSON.stringify({ headCommit: 'head', fileName: 'src/main.ts', isBase: false }) }),
 			prUri(''),
+			prUri('head', false, 'base', { remoteName: '' }),
+			prUri('head', false, 'base', { prNumber: 0 }),
+			prUri('head', false, 'base', { prNumber: -1 }),
+			prUri('head', false, 'base', { prNumber: 1.5 }),
 		];
 		for (const uri of unsupportedUris) {
 			activeEditor = createEditor(uri);
@@ -425,6 +430,65 @@ describe('Viewed line commands', function () {
 		assertDecorations(nextBaseEditor, [[8, 8]]);
 	});
 
+	it('isolates repository and PR identities while restoring reordered queries with changed status', async function () {
+		const uris = [
+			prUri(),
+			prUri().with({ authority: 'other-host' }),
+			prUri().with({ path: '/other-root/src/main.ts' }),
+			prUri('head', false, 'base', { remoteName: 'upstream' }),
+			prUri('head', false, 'base', { prNumber: 2 }),
+		];
+		const editors = uris.map((uri, index) => createEditor(uri, [new vscode.Selection(index * 2 + 1, 0, index * 2 + 1, 0)]));
+		visibleEditors = editors;
+		for (const editor of editors) {
+			activeEditor = editor;
+			await commands.executeCommand('pr.markSelectedLinesAsViewed');
+		}
+
+		assert.deepStrictEqual(state.get(key), [[1, 1]]);
+		assertDecorations(editors[0], [[1, 1]]);
+		assertDecorations(editors[1], [[3, 3]]);
+		assertDecorations(editors[2], [[5, 5]]);
+		assertDecorations(editors[3], [[7, 7]]);
+		assertDecorations(editors[4], [[9, 9]]);
+
+		disposeController();
+		const reopenedEditors = uris.map(uri => {
+			const params = JSON.parse(uri.query) as PRUriParams;
+			return createEditor(uri.with({
+				query: JSON.stringify({
+					status: GitChangeType.RENAME,
+					previousFileName: 'src/previous.ts',
+					prNumber: params.prNumber,
+					remoteName: params.remoteName,
+					isBase: params.isBase,
+					fileName: params.fileName,
+					baseCommit: 'updated-base',
+					headCommit: params.headCommit,
+				}),
+			}));
+		});
+		visibleEditors = reopenedEditors;
+		registerViewedLines(context);
+
+		assertDecorations(reopenedEditors[0], [[1, 1]]);
+		assertDecorations(reopenedEditors[1], [[3, 3]]);
+		assertDecorations(reopenedEditors[2], [[5, 5]]);
+		assertDecorations(reopenedEditors[3], [[7, 7]]);
+		assertDecorations(reopenedEditors[4], [[9, 9]]);
+
+		activeEditor = reopenedEditors[0];
+		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
+
+		assert.strictEqual(state.get(key), undefined);
+		assertDecorations(reopenedEditors[0], []);
+		assertDecorations(reopenedEditors[1], [[3, 3]]);
+		assertDecorations(reopenedEditors[2], [[5, 5]]);
+		assertDecorations(reopenedEditors[3], [[7, 7]]);
+		assertDecorations(reopenedEditors[4], [[9, 9]]);
+	});
+
 	it('continues processing commands after a rejected persistence write', async function () {
 		assert.ok(activeEditor);
 		const failure = new Error('Storage unavailable');
@@ -441,17 +505,19 @@ describe('Viewed line commands', function () {
 	});
 });
 
-function prUri(headCommit = 'head', isBase = false, baseCommit = 'base'): vscode.Uri {
+function prUri(headCommit = 'head', isBase = false, baseCommit = 'base', overrides: Partial<PRUriParams> = {}): vscode.Uri {
 	return vscode.Uri.from({
 		scheme: Schemes.Pr,
 		path: '/src/main.ts',
 		query: JSON.stringify({
-			prIdentifier: 'owner/repo#1',
 			headCommit,
 			baseCommit,
 			fileName: 'src/main.ts',
 			isBase,
 			prNumber: 1,
+			status: GitChangeType.MODIFY,
+			remoteName: 'origin',
+			...overrides,
 		}),
 	});
 }
