@@ -5,12 +5,12 @@
 
 import * as vscode from 'vscode';
 import { getReviewedLinesKey, LineRange, updateReviewedLines } from '../common/reviewedLines';
+import { PR_SETTINGS_NAMESPACE, REVIEWED_LINES_ENABLED } from '../common/settingKeys';
 import { fromPRUri, Schemes } from '../common/uri';
 
 /** Local progress for immutable PR diff documents; never changes GitHub's file-viewed state. */
 export function registerReviewedLines(context: vscode.ExtensionContext): void {
 	const decoration = vscode.window.createTextEditorDecorationType({
-		backgroundColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBackground'),
 		borderColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBorder'),
 		borderStyle: 'solid',
 		borderWidth: '0 0 0 3px',
@@ -18,8 +18,12 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 	});
 	let pending: Promise<void> = Promise.resolve();
 
+	function isEnabled(): boolean {
+		return vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<boolean>(REVIEWED_LINES_ENABLED, false);
+	}
+
 	function keyFor(editor: vscode.TextEditor): string | undefined {
-		if (editor.document.uri.scheme !== Schemes.Pr) {
+		if (!isEnabled() || editor.document.uri.scheme !== Schemes.Pr) {
 			return;
 		}
 		const params = fromPRUri(editor.document.uri);
@@ -48,6 +52,9 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 			selection.end.line - (!selection.isEmpty && selection.end.character === 0 ? 1 : 0)
 		]);
 		const update = pending.then(async () => {
+			if (!isEnabled()) {
+				return;
+			}
 			const ranges = updateReviewedLines(context.workspaceState.get<LineRange[]>(key, []), selections, reviewed);
 			await context.workspaceState.update(key, ranges.length ? ranges : undefined);
 			refresh();
@@ -61,7 +68,12 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 		decoration,
 		vscode.commands.registerCommand('pr.markSelectedLinesReviewed', () => mark(true)),
 		vscode.commands.registerCommand('pr.markSelectedLinesUnreviewed', () => mark(false)),
-		vscode.window.onDidChangeVisibleTextEditors(refresh)
+		vscode.window.onDidChangeVisibleTextEditors(refresh),
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${REVIEWED_LINES_ENABLED}`)) {
+				refresh();
+			}
+		})
 	);
 	refresh();
 }

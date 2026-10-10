@@ -304,6 +304,11 @@
 					"default": "tree",
 					"description": "%githubPullRequests.fileListLayout.description%"
 				},
+				"githubPullRequests.reviewedLines.enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "%githubPullRequests.reviewedLines.enabled.description%"
+				},
 				"githubPullRequests.hideViewedFiles": {
 					"type": "boolean",
 					"default": false,
@@ -1405,13 +1410,13 @@
 				"command": "pr.markSelectedLinesReviewed",
 				"title": "%command.pr.markSelectedLinesReviewed.title%",
 				"category": "%command.pull.request.category%",
-				"enablement": "resourceScheme == pr"
+				"enablement": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
 			},
 			{
 				"command": "pr.markSelectedLinesUnreviewed",
 				"title": "%command.pr.markSelectedLinesUnreviewed.title%",
 				"category": "%command.pull.request.category%",
-				"enablement": "resourceScheme == pr"
+				"enablement": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
 			},
 			{
 				"command": "pr.openReview",
@@ -2541,11 +2546,11 @@
 				},
 				{
 					"command": "pr.markSelectedLinesReviewed",
-					"when": "resourceScheme == pr"
+					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
 				},
 				{
 					"command": "pr.markSelectedLinesUnreviewed",
-					"when": "resourceScheme == pr"
+					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
 				},
 				{
 					"command": "pr.checkoutByNumber",
@@ -3592,12 +3597,12 @@
 			"editor/context": [
 				{
 					"command": "pr.markSelectedLinesReviewed",
-					"when": "resourceScheme == pr",
+					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr",
 					"group": "2_git@7"
 				},
 				{
 					"command": "pr.markSelectedLinesUnreviewed",
-					"when": "resourceScheme == pr",
+					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr",
 					"group": "2_git@8"
 				},
 				{
@@ -3875,16 +3880,6 @@
 			]
 		},
 		"colors": [
-			{
-				"id": "githubPullRequests.reviewedLineBackground",
-				"defaults": {
-					"dark": "#A78BFA26",
-					"light": "#8B5CF626",
-					"highContrast": "#A78BFA40",
-					"highContrastLight": "#6D28D940"
-				},
-				"description": "%githubPullRequests.reviewedLineBackground.description%"
-			},
 			{
 				"id": "githubPullRequests.reviewedLineBorder",
 				"defaults": {
