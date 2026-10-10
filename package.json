@@ -309,6 +309,13 @@
 					"default": false,
 					"description": "%githubPullRequests.viewedLines.enabled.description%"
 				},
+				"githubPullRequests.viewedLines.markerColor": {
+					"type": "string",
+					"default": "#8B5CF6",
+					"pattern": "^#[0-9a-fA-F]{6}$",
+					"maxLength": 7,
+					"description": "%githubPullRequests.viewedLines.markerColor.description%"
+				},
 				"githubPullRequests.hideViewedFiles": {
 					"type": "boolean",
 					"default": false,
@@ -3880,16 +3887,6 @@
 			]
 		},
 		"colors": [
-			{
-				"id": "githubPullRequests.viewedLineBorder",
-				"defaults": {
-					"dark": "#A78BFA",
-					"light": "#6D28D9",
-					"highContrast": "editor.foreground",
-					"highContrastLight": "editor.foreground"
-				},
-				"description": "%githubPullRequests.viewedLineBorder.description%"
-			},
 			{
 				"id": "issues.newIssueDecoration",
 				"defaults": {

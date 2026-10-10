@@ -22,13 +22,14 @@ describe('Viewed line commands', function () {
 	let visibleEditorsChanged: vscode.EventEmitter<readonly vscode.TextEditor[]>;
 	let configurationChanged: vscode.EventEmitter<vscode.ConfigurationChangeEvent>;
 	let viewedLinesEnabled: boolean | undefined;
+	let markerColor: unknown;
 	let getSetting: SinonStub;
 	let decoration: vscode.TextEditorDecorationType;
 	const key = getViewedLinesKey('owner/repo#1', 'head', 'src/main.ts', false);
 
-	function createEditor(uri = prUri(), selections = [new vscode.Selection(0, 0, 0, 0)]): vscode.TextEditor {
+	function createEditor(uri = prUri(), selections = [new vscode.Selection(0, 0, 0, 0)], lineCount = 100): vscode.TextEditor {
 		return {
-			document: { uri },
+			document: { uri, lineCount },
 			selections,
 			setDecorations: sandbox.stub(),
 		} as unknown as vscode.TextEditor;
@@ -38,8 +39,34 @@ describe('Viewed line commands', function () {
 		const setDecorations = editor.setDecorations as SinonStub;
 		assert.deepStrictEqual(setDecorations.lastCall.args, [
 			decoration,
-			ranges.map(([start, end]) => new vscode.Range(start, 0, end, Number.MAX_SAFE_INTEGER)),
+			ranges.flatMap(([start, end]) => Array.from({ length: end - start + 1 }, (_, offset) => new vscode.Range(start + offset, 0, start + offset, 0))),
 		]);
+	}
+
+	function assertMarker(color: string): void {
+		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
+		const options = createDecoration.lastCall.args[0] as vscode.DecorationRenderOptions;
+		assert.deepStrictEqual(Object.keys(options).sort(), ['gutterIconPath', 'gutterIconSize']);
+		assert.strictEqual(options.gutterIconSize, 'contain');
+		assert.ok(options.gutterIconPath instanceof vscode.Uri);
+		const uri = options.gutterIconPath.toString(true);
+		assert.match(uri, /^data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*$/);
+		const svg = Buffer.from(uri.substring(uri.indexOf(',') + 1), 'base64').toString('utf8');
+		assert.match(svg, /^<svg\s[^>]*><rect\s[^>]*\/><\/svg>$/);
+		assert.match(svg, /<svg\s[^>]*\bxmlns="http:\/\/www.w3.org\/2000\/svg"/);
+		for (const tag of ['svg', 'rect']) {
+			assert.match(svg, new RegExp(`<${tag}\\s[^>]*\\bwidth="3"`));
+			assert.match(svg, new RegExp(`<${tag}\\s[^>]*\\bheight="16"`));
+		}
+		assert.ok(svg.includes(`fill="${color}"`));
+		assert.doesNotMatch(svg, /(?:opacity|fill-opacity|stroke-opacity)="(?!1")[^"]*"/);
+	}
+
+	function setMarkerColor(color: unknown): void {
+		markerColor = color;
+		configurationChanged.fire({
+			affectsConfiguration: section => section === 'githubPullRequests.viewedLines.markerColor',
+		});
 	}
 
 	function setViewedLinesEnabled(enabled: boolean | undefined): void {
@@ -59,8 +86,10 @@ describe('Viewed line commands', function () {
 		commands = new MockCommandRegistry(sandbox);
 		state = new InMemoryMemento();
 		context = { workspaceState: state, subscriptions: [] } as unknown as vscode.ExtensionContext;
-		decoration = { key: 'viewed-lines', dispose: sandbox.stub() } as vscode.TextEditorDecorationType;
-		sandbox.stub(vscode.window, 'createTextEditorDecorationType').returns(decoration);
+		sandbox.stub(vscode.window, 'createTextEditorDecorationType').callsFake(() => {
+			decoration = { key: 'viewed-lines', dispose: sandbox.stub() } as vscode.TextEditorDecorationType;
+			return decoration;
+		});
 		activeEditor = createEditor();
 		visibleEditors = [activeEditor];
 		sandbox.stub(vscode.window, 'activeTextEditor').get(() => activeEditor);
@@ -68,7 +97,16 @@ describe('Viewed line commands', function () {
 		visibleEditorsChanged = new vscode.EventEmitter<readonly vscode.TextEditor[]>();
 		sandbox.stub(vscode.window, 'onDidChangeVisibleTextEditors').callsFake(visibleEditorsChanged.event);
 		viewedLinesEnabled = true;
-		getSetting = sandbox.stub().callsFake((_section: string, defaultValue?: unknown) => viewedLinesEnabled ?? defaultValue);
+		markerColor = undefined;
+		getSetting = sandbox.stub().callsFake((section: string, defaultValue?: unknown) => {
+			if (section === 'viewedLines.enabled') {
+				return viewedLinesEnabled ?? defaultValue;
+			}
+			if (section === 'viewedLines.markerColor') {
+				return markerColor === undefined ? defaultValue : markerColor;
+			}
+			return defaultValue;
+		});
 		sandbox.stub(vscode.workspace, 'getConfiguration').withArgs('githubPullRequests').returns({
 			get: getSetting,
 		} as unknown as vscode.WorkspaceConfiguration);
@@ -84,14 +122,87 @@ describe('Viewed line commands', function () {
 		sandbox.restore();
 	});
 
-	it('marks whole lines with only a theme left border without changing text or background', function () {
+	it('uses an opaque three-pixel gutter marker without changing text or background', function () {
+		assertMarker('#8B5CF6');
+	});
+
+	it('accepts six-digit custom marker colors without depending on letter case', function () {
+		for (const color of ['#123456', '#aBcDeF', '#000000', '#FFFFFF']) {
+			setMarkerColor(color);
+			assertMarker(color);
+		}
+	});
+
+	it('falls back to the default marker for invalid runtime colors', function () {
+		for (const color of [undefined, null, false, 123456, {}, [], ['#123456'], '', 'red', '#abc', '#12345g', '#12345678', ' #123456', '#123456\n', '#123456"/><script>alert(1)</script>']) {
+			setMarkerColor(color);
+			assertMarker('#8B5CF6');
+		}
+	});
+
+	it('recreates the marker and refreshes all visible editors when its color changes', async function () {
+		assert.ok(activeEditor);
+		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
+		const secondEditor = createEditor();
+		const otherHeadEditor = createEditor(prUri('other-head'));
+		visibleEditors = [activeEditor, secondEditor, otherHeadEditor];
+		const previousDecoration = decoration;
+		const update = sandbox.spy(state, 'update');
+
+		setMarkerColor('#A1B2C3');
+
+		assertMarker('#A1B2C3');
+		assert.notStrictEqual(decoration, previousDecoration);
+		assert.strictEqual((previousDecoration.dispose as SinonStub).callCount, 1);
+		assert.strictEqual((decoration.dispose as SinonStub).callCount, 0);
+		assertDecorations(activeEditor, [[1, 3]]);
+		assertDecorations(secondEditor, [[1, 3]]);
+		assertDecorations(otherHeadEditor, []);
+		assert.strictEqual(update.called, false);
+		assert.deepStrictEqual(state.get(key), [[1, 3]]);
+	});
+
+	it('disposes the current marker after repeated color changes and stops listening', function () {
+		const firstDecoration = decoration;
+		setMarkerColor('#123456');
+		const secondDecoration = decoration;
+		setMarkerColor('#ABCDEF');
+		const finalDecoration = decoration;
 		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
-		assert.deepStrictEqual(createDecoration.firstCall.args, [{
-			borderColor: new vscode.ThemeColor('githubPullRequests.viewedLineBorder'),
-			borderStyle: 'solid',
-			borderWidth: '0 0 0 3px',
-			isWholeLine: true
-		}]);
+		const previousCallCount = createDecoration.callCount;
+
+		disposeController();
+		setMarkerColor('#654321');
+
+		assert.strictEqual((firstDecoration.dispose as SinonStub).callCount, 1);
+		assert.strictEqual((secondDecoration.dispose as SinonStub).callCount, 1);
+		assert.strictEqual((finalDecoration.dispose as SinonStub).callCount, 1);
+		assert.strictEqual(createDecoration.callCount, previousCallCount);
+	});
+
+	it('places one marker on every viewed line including the final document line', async function () {
+		activeEditor = createEditor(prUri(), [new vscode.Selection(97, 0, 99, 1)]);
+		visibleEditors = [activeEditor];
+
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
+
+		assert.deepStrictEqual(state.get(key), [[97, 99]]);
+		assert.deepStrictEqual((activeEditor.setDecorations as SinonStub).lastCall.args, [decoration, [
+			new vscode.Range(97, 0, 97, 0),
+			new vscode.Range(98, 0, 98, 0),
+			new vscode.Range(99, 0, 99, 0),
+		]]);
+	});
+
+	it('clamps stored ranges to the document and skips ranges beyond its final line', async function () {
+		assert.ok(activeEditor);
+		await state.update(key, [[97, 102], [110, 112]]);
+
+		visibleEditorsChanged.fire(visibleEditors);
+
+		assertDecorations(activeEditor, [[97, 99]]);
+		assert.deepStrictEqual(state.get(key), [[97, 102], [110, 112]]);
 	});
 
 	it('defaults to disabled when the setting is undefined', async function () {

@@ -13,6 +13,7 @@ export const USE_REVIEW_MODE = 'useReviewMode';
 export const FILE_LIST_LAYOUT = 'fileListLayout';
 export const HIDE_VIEWED_FILES = 'hideViewedFiles';
 export const VIEWED_LINES_ENABLED = 'viewedLines.enabled';
+export const VIEWED_LINES_MARKER_COLOR = 'viewedLines.markerColor';
 export const FILE_AUTO_REVEAL = 'fileAutoReveal';
 export const ASSIGN_TO = 'assignCreated';
 export const PUSH_BRANCH = 'pushBranch';

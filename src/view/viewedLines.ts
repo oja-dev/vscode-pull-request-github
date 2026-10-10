@@ -3,19 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
-import { PR_SETTINGS_NAMESPACE, VIEWED_LINES_ENABLED } from '../common/settingKeys';
+import { PR_SETTINGS_NAMESPACE, VIEWED_LINES_ENABLED, VIEWED_LINES_MARKER_COLOR } from '../common/settingKeys';
 import { fromPRUri, Schemes } from '../common/uri';
 import { getViewedLinesKey, LineRange, updateViewedLines } from '../common/viewedLines';
 
 /** Local progress for immutable PR diff documents; never changes GitHub's file-viewed state. */
 export function registerViewedLines(context: vscode.ExtensionContext): void {
-	const decoration = vscode.window.createTextEditorDecorationType({
-		borderColor: new vscode.ThemeColor('githubPullRequests.viewedLineBorder'),
-		borderStyle: 'solid',
-		borderWidth: '0 0 0 3px',
-		isWholeLine: true
-	});
+	let decoration = createDecoration();
+
+	function createDecoration(): vscode.TextEditorDecorationType {
+		const configuredColor = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<string>(VIEWED_LINES_MARKER_COLOR, '#8B5CF6');
+		const color = typeof configuredColor === 'string' && configuredColor.length === 7 && /^#[0-9a-f]{6}$/i.test(configuredColor)
+			? configuredColor : '#8B5CF6';
+		const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="3" height="16"><rect width="3" height="16" fill="${color}"/></svg>`;
+		return vscode.window.createTextEditorDecorationType({
+			gutterIconPath: vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`),
+			gutterIconSize: 'contain'
+		});
+	}
+
 	let pending: Promise<void> = Promise.resolve();
 
 	function isEnabled(): boolean {
@@ -36,7 +44,13 @@ export function registerViewedLines(context: vscode.ExtensionContext): void {
 		for (const editor of vscode.window.visibleTextEditors) {
 			const key = keyFor(editor);
 			const ranges = key ? context.workspaceState.get<LineRange[]>(key, []) : [];
-			editor.setDecorations(decoration, ranges.map(([start, end]) => new vscode.Range(start, 0, end, Number.MAX_SAFE_INTEGER)));
+			const lines: vscode.Range[] = [];
+			for (const [start, end] of ranges) {
+				for (let line = start; line <= Math.min(end, editor.document.lineCount - 1); line++) {
+					lines.push(new vscode.Range(line, 0, line, 0));
+				}
+			}
+			editor.setDecorations(decoration, lines);
 		}
 	}
 
@@ -65,12 +79,17 @@ export function registerViewedLines(context: vscode.ExtensionContext): void {
 	}
 
 	context.subscriptions.push(
-		decoration,
+		{ dispose: () => decoration.dispose() },
 		vscode.commands.registerCommand('pr.markSelectedLinesAsViewed', () => mark(true)),
 		vscode.commands.registerCommand('pr.unmarkSelectedLinesAsViewed', () => mark(false)),
 		vscode.window.onDidChangeVisibleTextEditors(refresh),
 		vscode.workspace.onDidChangeConfiguration(event => {
-			if (event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${VIEWED_LINES_ENABLED}`)) {
+			const colorChanged = event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${VIEWED_LINES_MARKER_COLOR}`);
+			if (colorChanged) {
+				decoration.dispose();
+				decoration = createDecoration();
+			}
+			if (colorChanged || event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${VIEWED_LINES_ENABLED}`)) {
 				refresh();
 			}
 		})
