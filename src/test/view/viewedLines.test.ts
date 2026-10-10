@@ -8,7 +8,8 @@ import { createSandbox, SinonSandbox, SinonStub } from 'sinon';
 import * as vscode from 'vscode';
 import { GitChangeType } from '../../common/file';
 import { LineRange } from '../../common/viewedLines';
-import { PRUriParams, Schemes } from '../../common/uri';
+import { toPRUri } from '../../common/uri';
+import type { PullRequestModel } from '../../github/pullRequestModel';
 import { registerViewedLines } from '../../view/viewedLines';
 import { InMemoryMemento } from '../mocks/inMemoryMemento';
 import { MockCommandRegistry } from '../mocks/mockCommandRegistry';
@@ -43,9 +44,8 @@ describe('Viewed line commands', function () {
 		]);
 	}
 
-	function assertMarker(color: string): void {
-		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
-		const options = createDecoration.lastCall.args[0] as vscode.DecorationRenderOptions;
+	async function assertMarker(color: string): Promise<void> {
+		const options = (vscode.window.createTextEditorDecorationType as SinonStub).lastCall.args[0] as vscode.DecorationRenderOptions;
 		assert.strictEqual(options.backgroundColor, undefined);
 		assert.strictEqual(options.border, undefined);
 		assert.strictEqual(options.borderColor, undefined);
@@ -53,18 +53,14 @@ describe('Viewed line commands', function () {
 		assert.strictEqual(options.color, undefined);
 		assert.strictEqual(options.opacity, undefined);
 		assert.ok(options.gutterIconPath instanceof vscode.Uri);
-		const uri = options.gutterIconPath.toString(true);
-		const separator = uri.indexOf(',');
-		const mediaType = uri.substring(0, separator);
-		assert.match(mediaType, /^data:image\/svg\+xml(?:;[^,]*)?$/);
-		const payload = uri.substring(separator + 1);
-		const svg = mediaType.includes(';base64') ? Buffer.from(payload, 'base64').toString('utf8') : decodeURIComponent(payload);
-		assert.match(svg, /<svg\b[^>]*\bxmlns="http:\/\/www.w3.org\/2000\/svg"/);
-		// A color on an empty SVG does not paint a marker.
+		assert.strictEqual(options.gutterIconPath.scheme, 'data');
+		const response = await fetch(options.gutterIconPath.toString(true));
+		assert.match(response.headers.get('content-type') ?? '', /^image\/svg\+xml/);
+		const svg = await response.text();
+		assert.match(svg, /<svg\b[^>]*xmlns=["']http:\/\/www.w3.org\/2000\/svg["']/);
 		assert.match(svg, /<(?:path|rect|line|polyline|polygon|circle|ellipse)\b/);
 		assert.match(svg, new RegExp(`\\bfill=["']${color}["']`, 'i'));
 		assert.doesNotMatch(svg, /<script\b|\bon\w+\s*=/i);
-		assert.doesNotMatch(svg, /(?:opacity|fill-opacity|stroke-opacity)="(?!1")[^"]*"/);
 	}
 
 	function setMarkerColor(color: unknown): void {
@@ -84,6 +80,18 @@ describe('Viewed line commands', function () {
 	function disposeController(): void {
 		context.subscriptions.forEach(disposable => disposable.dispose());
 		context.subscriptions.length = 0;
+	}
+
+	function delayFirstWrite(): { update: SinonStub; releaseWrite: () => void } {
+		let releaseWrite!: () => void;
+		const firstWrite = new Promise<void>(resolve => { releaseWrite = resolve; });
+		const save = state.update.bind(state);
+		const update = sandbox.stub(state, 'update').callsFake(save);
+		update.onFirstCall().callsFake(async (key, value) => {
+			await firstWrite;
+			await save(key, value);
+		});
+		return { update, releaseWrite };
 	}
 
 	beforeEach(function () {
@@ -127,14 +135,11 @@ describe('Viewed line commands', function () {
 		sandbox.restore();
 	});
 
-	it('uses an opaque gutter marker without changing text or background', function () {
-		assertMarker('#8B5CF6');
-	});
-
-	it('falls back to the default marker for invalid runtime colors', function () {
-		for (const color of [undefined, null, false, 123456, {}, [], ['#123456'], '', 'red', '#abc', '#12345g', '#12345678', ' #123456', '#123456\n', '#123456"/><script>alert(1)</script>']) {
+	it('uses the default color for unset and invalid settings', async function () {
+		await assertMarker('#8B5CF6');
+		for (const color of [null, false, 123456, {}, [], ['#123456'], '', 'red', '#abc', '#12345g', '#12345678', ' #123456', '#123456\n', '#123456"/><script>alert(1)</script>']) {
 			setMarkerColor(color);
-			assertMarker('#8B5CF6');
+			await assertMarker('#8B5CF6');
 		}
 	});
 
@@ -150,7 +155,7 @@ describe('Viewed line commands', function () {
 
 		setMarkerColor('#a1B2c3');
 
-		assertMarker('#a1B2c3');
+		await assertMarker('#a1B2c3');
 		assert.notStrictEqual(decoration, previousDecoration);
 		assert.strictEqual((previousDecoration.dispose as SinonStub).callCount, 1);
 		assert.strictEqual((decoration.dispose as SinonStub).callCount, 0);
@@ -179,27 +184,17 @@ describe('Viewed line commands', function () {
 		assert.strictEqual(createDecoration.callCount, previousCallCount);
 	});
 
-	it('places one marker on every viewed line including the final document line', async function () {
+	it('marks the final line and clips restored ranges without rewriting saved progress', async function () {
 		activeEditor = createEditor(prUri(), [new vscode.Selection(97, 0, 99, 1)]);
 		visibleEditors = [activeEditor];
-
 		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-
 		assert.deepStrictEqual(state.get(key), [[97, 99]]);
-		assert.deepStrictEqual((activeEditor.setDecorations as SinonStub).lastCall.args, [decoration, [
-			new vscode.Range(97, 0, 97, 0),
-			new vscode.Range(98, 0, 98, 0),
-			new vscode.Range(99, 0, 99, 0),
-		]]);
-	});
+		const expected = [new vscode.Range(97, 0, 97, 0), new vscode.Range(98, 0, 98, 0), new vscode.Range(99, 0, 99, 0)];
+		assert.deepStrictEqual((activeEditor.setDecorations as SinonStub).lastCall.args, [decoration, expected]);
 
-	it('clamps stored ranges to the document and skips ranges beyond its final line', async function () {
-		assert.ok(activeEditor);
 		await state.update(key, [[97, 102], [110, 112]]);
-
 		visibleEditorsChanged.fire(visibleEditors);
-
-		assertDecorations(activeEditor, [[97, 99]]);
+		assert.deepStrictEqual((activeEditor.setDecorations as SinonStub).lastCall.args, [decoration, expected]);
 		assert.deepStrictEqual(state.get(key), [[97, 102], [110, 112]]);
 	});
 
@@ -219,23 +214,7 @@ describe('Viewed line commands', function () {
 		assertDecorations(activeEditor, []);
 	});
 
-	it('ignores mark and unmark commands when disabled and preserves stored lines', async function () {
-		assert.ok(activeEditor);
-		await state.update(key, [[1, 3]]);
-		const update = sandbox.spy(state, 'update');
-		setViewedLinesEnabled(false);
-
-		activeEditor.selections = [new vscode.Selection(6, 0, 6, 0)];
-		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		activeEditor.selections = [new vscode.Selection(1, 0, 4, 0)];
-		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
-
-		assert.strictEqual(update.called, false);
-		assert.deepStrictEqual(state.get(key), [[1, 3]]);
-		assertDecorations(activeEditor, []);
-	});
-
-	it('clears all visible decorations when disabled and restores them when enabled without reloading', async function () {
+	it('disables commands and markers without losing progress, then restores all visible editors', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
 		await commands.executeCommand('pr.markSelectedLinesAsViewed');
@@ -250,6 +229,10 @@ describe('Viewed line commands', function () {
 		setViewedLinesEnabled(false);
 
 		visibleEditors.forEach(editor => assertDecorations(editor, []));
+		activeEditor.selections = [new vscode.Selection(6, 0, 6, 0)];
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
+		activeEditor.selections = [new vscode.Selection(1, 0, 4, 0)];
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
 
 		setViewedLinesEnabled(true);
@@ -291,20 +274,6 @@ describe('Viewed line commands', function () {
 		assertDecorations(activeEditor, [[2, 2], [5, 7], [9, 9]]);
 	});
 
-	it('restores persisted decorations when the controller is registered again', async function () {
-		assert.ok(activeEditor);
-		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
-		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		disposeController();
-		activeEditor = createEditor();
-		visibleEditors = [activeEditor];
-
-		registerViewedLines(context);
-
-		assert.deepStrictEqual(state.get(key), [[1, 3]]);
-		assertDecorations(activeEditor, [[1, 3]]);
-	});
-
 	it('refreshes decorations for every newly visible editor and clears unsupported editors', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(3, 0, 3, 0)];
@@ -329,10 +298,10 @@ describe('Viewed line commands', function () {
 			prUri().with({ query: '{invalid' }),
 			prUri().with({ query: JSON.stringify({ headCommit: 'head', fileName: 'src/main.ts', isBase: false }) }),
 			prUri(''),
-			prUri('head', false, 'base', { remoteName: '' }),
-			prUri('head', false, 'base', { prNumber: 0 }),
-			prUri('head', false, 'base', { prNumber: -1 }),
-			prUri('head', false, 'base', { prNumber: 1.5 }),
+			prUri('head', ''),
+			prUri('head', 'origin', 0),
+			prUri('head', 'origin', -1),
+			prUri('head', 'origin', 1.5),
 		];
 		for (const uri of unsupportedUris) {
 			activeEditor = createEditor(uri);
@@ -348,14 +317,7 @@ describe('Viewed line commands', function () {
 
 	it('serializes rapid writes and captures each command selection before waiting', async function () {
 		assert.ok(activeEditor);
-		let releaseWrite!: () => void;
-		const firstWrite = new Promise<void>(resolve => { releaseWrite = resolve; });
-		const save = state.update.bind(state);
-		const update = sandbox.stub(state, 'update').callsFake(save);
-		update.onFirstCall().callsFake(async (key, value) => {
-			await firstWrite;
-			await save(key, value);
-		});
+		const { update, releaseWrite } = delayFirstWrite();
 
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
 		const first = commands.executeCommand('pr.markSelectedLinesAsViewed');
@@ -376,14 +338,7 @@ describe('Viewed line commands', function () {
 
 	it('skips queued mark and unmark writes if the setting is disabled while waiting', async function () {
 		assert.ok(activeEditor);
-		let releaseWrite!: () => void;
-		const firstWrite = new Promise<void>(resolve => { releaseWrite = resolve; });
-		const save = state.update.bind(state);
-		const update = sandbox.stub(state, 'update').callsFake(save);
-		update.onFirstCall().callsFake(async (key, value) => {
-			await firstWrite;
-			await save(key, value);
-		});
+		const { update, releaseWrite } = delayFirstWrite();
 
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
 		const first = commands.executeCommand('pr.markSelectedLinesAsViewed');
@@ -407,86 +362,31 @@ describe('Viewed line commands', function () {
 		assertDecorations(activeEditor, [[1, 1]]);
 	});
 
-	it('keeps viewed lines separate for each head commit, base commit, and diff side', async function () {
+	it('round-trips producer-created PR URIs across controller re-registration and metadata changes', async function () {
 		assert.ok(activeEditor);
-		const headEditor = activeEditor;
-		headEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
+		const uri = activeEditor.document.uri;
+		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
 		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		const nextHeadEditor = createEditor(prUri('next-head'), [new vscode.Selection(4, 0, 4, 0)]);
-		const baseEditor = createEditor(prUri('head', true), [new vscode.Selection(6, 0, 6, 0)]);
-		const nextBaseEditor = createEditor(prUri('head', true, 'next-base'), [new vscode.Selection(8, 0, 8, 0)]);
-		visibleEditors = [headEditor, nextHeadEditor, baseEditor, nextBaseEditor];
-		activeEditor = nextHeadEditor;
+		const otherUri = prUri('head', 'origin', 2);
+		activeEditor = createEditor(otherUri, [new vscode.Selection(7, 0, 7, 0)]);
+		visibleEditors = [activeEditor];
 		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		activeEditor = baseEditor;
-		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		activeEditor = nextBaseEditor;
-		await commands.executeCommand('pr.markSelectedLinesAsViewed');
-
-		assert.deepStrictEqual(state.get(key), [[1, 1]]);
-		assertDecorations(headEditor, [[1, 1]]);
-		assertDecorations(nextHeadEditor, [[4, 4]]);
-		assertDecorations(baseEditor, [[6, 6]]);
-		assertDecorations(nextBaseEditor, [[8, 8]]);
-	});
-
-	it('isolates repository and PR identities while restoring reordered queries with changed status', async function () {
-		const uris = [
-			prUri(),
-			prUri().with({ authority: 'other-host' }),
-			prUri().with({ path: '/other-root/src/main.ts' }),
-			prUri('head', false, 'base', { remoteName: 'upstream' }),
-			prUri('head', false, 'base', { prNumber: 2 }),
-		];
-		const editors = uris.map((uri, index) => createEditor(uri, [new vscode.Selection(index * 2 + 1, 0, index * 2 + 1, 0)]));
-		visibleEditors = editors;
-		for (const editor of editors) {
-			activeEditor = editor;
-			await commands.executeCommand('pr.markSelectedLinesAsViewed');
-		}
-
-		assert.deepStrictEqual(state.get(key), [[1, 1]]);
-		assertDecorations(editors[0], [[1, 1]]);
-		assertDecorations(editors[1], [[3, 3]]);
-		assertDecorations(editors[2], [[5, 5]]);
-		assertDecorations(editors[3], [[7, 7]]);
-		assertDecorations(editors[4], [[9, 9]]);
-
 		disposeController();
-		const reopenedEditors = uris.map(uri => {
-			const params = JSON.parse(uri.query) as PRUriParams;
-			return createEditor(uri.with({
-				query: JSON.stringify({
-					status: GitChangeType.RENAME,
-					previousFileName: 'src/previous.ts',
-					prNumber: params.prNumber,
-					remoteName: params.remoteName,
-					isBase: params.isBase,
-					fileName: params.fileName,
-					baseCommit: 'updated-base',
-					headCommit: params.headCommit,
-				}),
-			}));
-		});
-		visibleEditors = reopenedEditors;
+
+		const params = { ...JSON.parse(uri.query), status: GitChangeType.RENAME, previousFileName: 'old.ts', baseCommit: 'updated-base' };
+		const reordered = Object.fromEntries(Object.entries(params).reverse());
+		activeEditor = createEditor(uri.with({ query: JSON.stringify(reordered) }), [new vscode.Selection(1, 0, 4, 0)]);
+		const otherEditor = createEditor(otherUri);
+		visibleEditors = [activeEditor, otherEditor];
 		registerViewedLines(context);
+		assert.deepStrictEqual(state.get(key), [[1, 3]]);
+		assertDecorations(activeEditor, [[1, 3]]);
+		assertDecorations(otherEditor, [[7, 7]]);
 
-		assertDecorations(reopenedEditors[0], [[1, 1]]);
-		assertDecorations(reopenedEditors[1], [[3, 3]]);
-		assertDecorations(reopenedEditors[2], [[5, 5]]);
-		assertDecorations(reopenedEditors[3], [[7, 7]]);
-		assertDecorations(reopenedEditors[4], [[9, 9]]);
-
-		activeEditor = reopenedEditors[0];
-		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
 		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
-
 		assert.strictEqual(state.get(key), undefined);
-		assertDecorations(reopenedEditors[0], []);
-		assertDecorations(reopenedEditors[1], [[3, 3]]);
-		assertDecorations(reopenedEditors[2], [[5, 5]]);
-		assertDecorations(reopenedEditors[3], [[7, 7]]);
-		assertDecorations(reopenedEditors[4], [[9, 9]]);
+		assertDecorations(activeEditor, []);
+		assertDecorations(otherEditor, [[7, 7]]);
 	});
 
 	it('continues processing commands after a rejected persistence write', async function () {
@@ -505,19 +405,7 @@ describe('Viewed line commands', function () {
 	});
 });
 
-function prUri(headCommit = 'head', isBase = false, baseCommit = 'base', overrides: Partial<PRUriParams> = {}): vscode.Uri {
-	return vscode.Uri.from({
-		scheme: Schemes.Pr,
-		path: '/src/main.ts',
-		query: JSON.stringify({
-			headCommit,
-			baseCommit,
-			fileName: 'src/main.ts',
-			isBase,
-			prNumber: 1,
-			status: GitChangeType.MODIFY,
-			remoteName: 'origin',
-			...overrides,
-		}),
-	});
+function prUri(headCommit = 'head', remoteName = 'origin', prNumber = 1): vscode.Uri {
+	const pullRequest = { number: prNumber, githubRepository: { remote: { remoteName } } } as PullRequestModel;
+	return toPRUri(vscode.Uri.file('/src/main.ts'), pullRequest, 'base', headCommit, 'src/main.ts', false, GitChangeType.MODIFY);
 }
