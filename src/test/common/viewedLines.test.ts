@@ -7,7 +7,7 @@ import { default as assert } from 'assert';
 import { LineRange, getViewedLinesKey, updateViewedLines } from '../../common/viewedLines';
 
 describe('Viewed line ranges', function () {
-	it('marks the first line of an empty file review', function () {
+	it('marks the first line when no progress is saved', function () {
 		assert.deepStrictEqual(updateViewedLines([], [[0, 0]], true), [[0, 0]]);
 	});
 
@@ -97,13 +97,9 @@ describe('Viewed line storage keys', function () {
 	const head = 'head-sha';
 	const file = 'src/example.ts';
 
-	it('returns a stable key for the same review context', function () {
-		assert.strictEqual(getViewedLinesKey(pr, head, file, false), getViewedLinesKey(pr, head, file, false));
-	});
-
 	it('preserves the historical storage key for existing local progress', function () {
-		assert.strictEqual(getViewedLinesKey(pr, head, file, false), `reviewedLines:${JSON.stringify([pr, head, file, false, null])}`);
-		assert.strictEqual(getViewedLinesKey(pr, head, file, true, 'base-sha'), `reviewedLines:${JSON.stringify([pr, head, file, true, 'base-sha'])}`);
+		assert.strictEqual(getViewedLinesKey(pr, head, file, false), 'reviewedLines:["https://github.com/owner/repository/pull/1","head-sha","src/example.ts",false,null]');
+		assert.strictEqual(getViewedLinesKey(pr, head, file, true, 'base-sha'), 'reviewedLines:["https://github.com/owner/repository/pull/1","head-sha","src/example.ts",true,"base-sha"]');
 	});
 
 	it('isolates pull requests, revisions, files, and diff sides', function () {
