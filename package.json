@@ -304,6 +304,18 @@
 					"default": "tree",
 					"description": "%githubPullRequests.fileListLayout.description%"
 				},
+				"githubPullRequests.viewedLines.enabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "%githubPullRequests.viewedLines.enabled.description%"
+				},
+				"githubPullRequests.viewedLines.markerColor": {
+					"type": "string",
+					"default": "#8B5CF6",
+					"pattern": "^#[0-9a-fA-F]{6}$",
+					"maxLength": 7,
+					"description": "%githubPullRequests.viewedLines.markerColor.description%"
+				},
 				"githubPullRequests.hideViewedFiles": {
 					"type": "boolean",
 					"default": false,
@@ -1400,6 +1412,18 @@
 				"title": "%command.pr.unmarkFileAsViewed.title%",
 				"category": "%command.pull.request.category%",
 				"icon": "$(pass-filled)"
+			},
+			{
+				"command": "pr.markSelectedLinesAsViewed",
+				"title": "%command.pr.markSelectedLinesAsViewed.title%",
+				"category": "%command.pull.request.category%",
+				"enablement": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
+			},
+			{
+				"command": "pr.unmarkSelectedLinesAsViewed",
+				"title": "%command.pr.unmarkSelectedLinesAsViewed.title%",
+				"category": "%command.pull.request.category%",
+				"enablement": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
 			},
 			{
 				"command": "pr.openReview",
@@ -2528,6 +2552,14 @@
 					"when": "false"
 				},
 				{
+					"command": "pr.markSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
+				},
+				{
+					"command": "pr.unmarkSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
+				},
+				{
 					"command": "pr.checkoutByNumber",
 					"when": "(gitHubOpenRepositoryCount != 0 && github:initialized && github:authenticated) && !isSessionsWindow"
 				},
@@ -3570,6 +3602,16 @@
 				}
 			],
 			"editor/context": [
+				{
+					"command": "pr.markSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr",
+					"group": "2_git@7"
+				},
+				{
+					"command": "pr.unmarkSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr",
+					"group": "2_git@8"
+				},
 				{
 					"command": "review.createSuggestionFromChange",
 					"when": "(activeEditor == workbench.editors.textDiffEditor && (resourcePath in github:unviewedFiles || resourcePath in github:viewedFiles)) && !isSessionsWindow",

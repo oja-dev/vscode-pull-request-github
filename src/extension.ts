@@ -60,6 +60,7 @@ import { PrsTreeModel } from './view/prsTreeModel';
 import { ReviewManager, ShowPullRequest } from './view/reviewManager';
 import { ReviewsManager } from './view/reviewsManager';
 import { TreeDecorationProviders } from './view/treeDecorationProviders';
+import { registerViewedLines } from './view/viewedLines';
 import { WebviewViewCoordinator } from './view/webviewViewCoordinator';
 
 const ingestionKey = '0c6ae279ed8443289764825290e4f9e2-1a736e7c-1324-4338-be46-fc2a58ae4d14-7255';
@@ -265,6 +266,7 @@ async function init(
 	context.subscriptions.push(folderRepositoryManagerResolver);
 
 	registerCommands(context, reposManager, reviewsManager, telemetry, copilotRemoteAgentManager, notificationsManager, prsTreeModel, tree, folderRepositoryManagerResolver);
+	registerViewedLines(context);
 
 	const layout = vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<string>(FILE_LIST_LAYOUT);
 	await vscode.commands.executeCommand('setContext', 'fileListLayout:flat', layout === 'flat');
