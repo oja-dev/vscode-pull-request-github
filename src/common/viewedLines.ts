@@ -6,13 +6,14 @@
 /** Inclusive, zero-based line numbers. */
 export type LineRange = [start: number, end: number];
 
-export function getReviewedLinesKey(prIdentifier: string, headCommit: string, fileName: string, isBase: boolean, baseCommit?: string): string {
+export function getViewedLinesKey(prIdentifier: string, headCommit: string, fileName: string, isBase: boolean, baseCommit?: string): string {
+	// Keep the original storage prefix so existing local progress survives the rename.
 	return `reviewedLines:${JSON.stringify([prIdentifier, headCommit, fileName, isBase, isBase ? baseCommit : undefined])}`;
 }
 
 /** Merge marked ranges, or remove selected lines (splitting existing ranges when needed). */
-export function updateReviewedLines(current: readonly LineRange[], selections: readonly LineRange[], reviewed: boolean): LineRange[] {
-	if (!reviewed) {
+export function updateViewedLines(current: readonly LineRange[], selections: readonly LineRange[], viewed: boolean): LineRange[] {
+	if (!viewed) {
 		let ranges = [...current];
 		for (const [start, end] of selections) {
 			ranges = ranges.flatMap(([first, last]) => {

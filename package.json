@@ -304,10 +304,10 @@
 					"default": "tree",
 					"description": "%githubPullRequests.fileListLayout.description%"
 				},
-				"githubPullRequests.reviewedLines.enabled": {
+				"githubPullRequests.viewedLines.enabled": {
 					"type": "boolean",
 					"default": false,
-					"description": "%githubPullRequests.reviewedLines.enabled.description%"
+					"description": "%githubPullRequests.viewedLines.enabled.description%"
 				},
 				"githubPullRequests.hideViewedFiles": {
 					"type": "boolean",
@@ -1407,16 +1407,16 @@
 				"icon": "$(pass-filled)"
 			},
 			{
-				"command": "pr.markSelectedLinesReviewed",
-				"title": "%command.pr.markSelectedLinesReviewed.title%",
+				"command": "pr.markSelectedLinesAsViewed",
+				"title": "%command.pr.markSelectedLinesAsViewed.title%",
 				"category": "%command.pull.request.category%",
-				"enablement": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
+				"enablement": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
 			},
 			{
-				"command": "pr.markSelectedLinesUnreviewed",
-				"title": "%command.pr.markSelectedLinesUnreviewed.title%",
+				"command": "pr.unmarkSelectedLinesAsViewed",
+				"title": "%command.pr.unmarkSelectedLinesAsViewed.title%",
 				"category": "%command.pull.request.category%",
-				"enablement": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
+				"enablement": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
 			},
 			{
 				"command": "pr.openReview",
@@ -2545,12 +2545,12 @@
 					"when": "false"
 				},
 				{
-					"command": "pr.markSelectedLinesReviewed",
-					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
+					"command": "pr.markSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
 				},
 				{
-					"command": "pr.markSelectedLinesUnreviewed",
-					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr"
+					"command": "pr.unmarkSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr"
 				},
 				{
 					"command": "pr.checkoutByNumber",
@@ -3596,13 +3596,13 @@
 			],
 			"editor/context": [
 				{
-					"command": "pr.markSelectedLinesReviewed",
-					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr",
+					"command": "pr.markSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr",
 					"group": "2_git@7"
 				},
 				{
-					"command": "pr.markSelectedLinesUnreviewed",
-					"when": "config.githubPullRequests.reviewedLines.enabled && resourceScheme == pr",
+					"command": "pr.unmarkSelectedLinesAsViewed",
+					"when": "config.githubPullRequests.viewedLines.enabled && resourceScheme == pr",
 					"group": "2_git@8"
 				},
 				{
@@ -3881,14 +3881,14 @@
 		},
 		"colors": [
 			{
-				"id": "githubPullRequests.reviewedLineBorder",
+				"id": "githubPullRequests.viewedLineBorder",
 				"defaults": {
 					"dark": "#A78BFA",
 					"light": "#6D28D9",
 					"highContrast": "editor.foreground",
 					"highContrastLight": "editor.foreground"
 				},
-				"description": "%githubPullRequests.reviewedLineBorder.description%"
+				"description": "%githubPullRequests.viewedLineBorder.description%"
 			},
 			{
 				"id": "issues.newIssueDecoration",

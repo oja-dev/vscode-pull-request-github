@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { getReviewedLinesKey, LineRange, updateReviewedLines } from '../common/reviewedLines';
-import { PR_SETTINGS_NAMESPACE, REVIEWED_LINES_ENABLED } from '../common/settingKeys';
+import { PR_SETTINGS_NAMESPACE, VIEWED_LINES_ENABLED } from '../common/settingKeys';
 import { fromPRUri, Schemes } from '../common/uri';
+import { getViewedLinesKey, LineRange, updateViewedLines } from '../common/viewedLines';
 
 /** Local progress for immutable PR diff documents; never changes GitHub's file-viewed state. */
-export function registerReviewedLines(context: vscode.ExtensionContext): void {
+export function registerViewedLines(context: vscode.ExtensionContext): void {
 	const decoration = vscode.window.createTextEditorDecorationType({
-		borderColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBorder'),
+		borderColor: new vscode.ThemeColor('githubPullRequests.viewedLineBorder'),
 		borderStyle: 'solid',
 		borderWidth: '0 0 0 3px',
 		isWholeLine: true
@@ -19,7 +19,7 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 	let pending: Promise<void> = Promise.resolve();
 
 	function isEnabled(): boolean {
-		return vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<boolean>(REVIEWED_LINES_ENABLED, false);
+		return vscode.workspace.getConfiguration(PR_SETTINGS_NAMESPACE).get<boolean>(VIEWED_LINES_ENABLED, false);
 	}
 
 	function keyFor(editor: vscode.TextEditor): string | undefined {
@@ -28,7 +28,7 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 		}
 		const params = fromPRUri(editor.document.uri);
 		if (params?.prIdentifier && params.headCommit) {
-			return getReviewedLinesKey(params.prIdentifier, params.headCommit, params.fileName, params.isBase, params.baseCommit);
+			return getViewedLinesKey(params.prIdentifier, params.headCommit, params.fileName, params.isBase, params.baseCommit);
 		}
 	}
 
@@ -40,7 +40,7 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 		}
 	}
 
-	function mark(reviewed: boolean): Promise<void> {
+	function mark(viewed: boolean): Promise<void> {
 		const editor = vscode.window.activeTextEditor;
 		const key = editor && keyFor(editor);
 		if (!editor || !key) {
@@ -55,7 +55,7 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 			if (!isEnabled()) {
 				return;
 			}
-			const ranges = updateReviewedLines(context.workspaceState.get<LineRange[]>(key, []), selections, reviewed);
+			const ranges = updateViewedLines(context.workspaceState.get<LineRange[]>(key, []), selections, viewed);
 			await context.workspaceState.update(key, ranges.length ? ranges : undefined);
 			refresh();
 		});
@@ -66,11 +66,11 @@ export function registerReviewedLines(context: vscode.ExtensionContext): void {
 
 	context.subscriptions.push(
 		decoration,
-		vscode.commands.registerCommand('pr.markSelectedLinesReviewed', () => mark(true)),
-		vscode.commands.registerCommand('pr.markSelectedLinesUnreviewed', () => mark(false)),
+		vscode.commands.registerCommand('pr.markSelectedLinesAsViewed', () => mark(true)),
+		vscode.commands.registerCommand('pr.unmarkSelectedLinesAsViewed', () => mark(false)),
 		vscode.window.onDidChangeVisibleTextEditors(refresh),
 		vscode.workspace.onDidChangeConfiguration(event => {
-			if (event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${REVIEWED_LINES_ENABLED}`)) {
+			if (event.affectsConfiguration(`${PR_SETTINGS_NAMESPACE}.${VIEWED_LINES_ENABLED}`)) {
 				refresh();
 			}
 		})

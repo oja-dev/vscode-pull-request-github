@@ -6,13 +6,13 @@
 import { default as assert } from 'assert';
 import { createSandbox, SinonSandbox, SinonStub } from 'sinon';
 import * as vscode from 'vscode';
-import { LineRange, getReviewedLinesKey } from '../../common/reviewedLines';
+import { LineRange, getViewedLinesKey } from '../../common/viewedLines';
 import { Schemes } from '../../common/uri';
-import { registerReviewedLines } from '../../view/reviewedLines';
+import { registerViewedLines } from '../../view/viewedLines';
 import { InMemoryMemento } from '../mocks/inMemoryMemento';
 import { MockCommandRegistry } from '../mocks/mockCommandRegistry';
 
-describe('Reviewed line commands', function () {
+describe('Viewed line commands', function () {
 	let sandbox: SinonSandbox;
 	let commands: MockCommandRegistry;
 	let context: vscode.ExtensionContext;
@@ -21,10 +21,10 @@ describe('Reviewed line commands', function () {
 	let visibleEditors: vscode.TextEditor[];
 	let visibleEditorsChanged: vscode.EventEmitter<readonly vscode.TextEditor[]>;
 	let configurationChanged: vscode.EventEmitter<vscode.ConfigurationChangeEvent>;
-	let reviewedLinesEnabled: boolean | undefined;
+	let viewedLinesEnabled: boolean | undefined;
 	let getSetting: SinonStub;
 	let decoration: vscode.TextEditorDecorationType;
-	const key = getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', false);
+	const key = getViewedLinesKey('owner/repo#1', 'head', 'src/main.ts', false);
 
 	function createEditor(uri = prUri(), selections = [new vscode.Selection(0, 0, 0, 0)]): vscode.TextEditor {
 		return {
@@ -42,10 +42,10 @@ describe('Reviewed line commands', function () {
 		]);
 	}
 
-	function setReviewedLinesEnabled(enabled: boolean | undefined): void {
-		reviewedLinesEnabled = enabled;
+	function setViewedLinesEnabled(enabled: boolean | undefined): void {
+		viewedLinesEnabled = enabled;
 		configurationChanged.fire({
-			affectsConfiguration: section => section === 'githubPullRequests.reviewedLines.enabled',
+			affectsConfiguration: section => section === 'githubPullRequests.viewedLines.enabled',
 		});
 	}
 
@@ -59,7 +59,7 @@ describe('Reviewed line commands', function () {
 		commands = new MockCommandRegistry(sandbox);
 		state = new InMemoryMemento();
 		context = { workspaceState: state, subscriptions: [] } as unknown as vscode.ExtensionContext;
-		decoration = { key: 'reviewed-lines', dispose: sandbox.stub() } as vscode.TextEditorDecorationType;
+		decoration = { key: 'viewed-lines', dispose: sandbox.stub() } as vscode.TextEditorDecorationType;
 		sandbox.stub(vscode.window, 'createTextEditorDecorationType').returns(decoration);
 		activeEditor = createEditor();
 		visibleEditors = [activeEditor];
@@ -67,14 +67,14 @@ describe('Reviewed line commands', function () {
 		sandbox.stub(vscode.window, 'visibleTextEditors').get(() => visibleEditors);
 		visibleEditorsChanged = new vscode.EventEmitter<readonly vscode.TextEditor[]>();
 		sandbox.stub(vscode.window, 'onDidChangeVisibleTextEditors').callsFake(visibleEditorsChanged.event);
-		reviewedLinesEnabled = true;
-		getSetting = sandbox.stub().callsFake((_section: string, defaultValue?: unknown) => reviewedLinesEnabled ?? defaultValue);
+		viewedLinesEnabled = true;
+		getSetting = sandbox.stub().callsFake((_section: string, defaultValue?: unknown) => viewedLinesEnabled ?? defaultValue);
 		sandbox.stub(vscode.workspace, 'getConfiguration').withArgs('githubPullRequests').returns({
 			get: getSetting,
 		} as unknown as vscode.WorkspaceConfiguration);
 		configurationChanged = new vscode.EventEmitter<vscode.ConfigurationChangeEvent>();
 		sandbox.stub(vscode.workspace, 'onDidChangeConfiguration').callsFake(configurationChanged.event);
-		registerReviewedLines(context);
+		registerViewedLines(context);
 	});
 
 	afterEach(function () {
@@ -87,7 +87,7 @@ describe('Reviewed line commands', function () {
 	it('marks whole lines with only a theme left border without changing text or background', function () {
 		const createDecoration = vscode.window.createTextEditorDecorationType as SinonStub;
 		assert.deepStrictEqual(createDecoration.firstCall.args, [{
-			borderColor: new vscode.ThemeColor('githubPullRequests.reviewedLineBorder'),
+			borderColor: new vscode.ThemeColor('githubPullRequests.viewedLineBorder'),
 			borderStyle: 'solid',
 			borderWidth: '0 0 0 3px',
 			isWholeLine: true
@@ -98,15 +98,15 @@ describe('Reviewed line commands', function () {
 		assert.ok(activeEditor);
 		await state.update(key, [[1, 3]]);
 		disposeController();
-		reviewedLinesEnabled = undefined;
+		viewedLinesEnabled = undefined;
 		getSetting.resetHistory();
 		const update = sandbox.spy(state, 'update');
 
-		registerReviewedLines(context);
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
-		await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		registerViewedLines(context);
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 
-		assert.ok(getSetting.calledWithExactly('reviewedLines.enabled', false));
+		assert.ok(getSetting.calledWithExactly('viewedLines.enabled', false));
 		assert.strictEqual(update.called, false);
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
 		assertDecorations(activeEditor, []);
@@ -116,12 +116,12 @@ describe('Reviewed line commands', function () {
 		assert.ok(activeEditor);
 		await state.update(key, [[1, 3]]);
 		const update = sandbox.spy(state, 'update');
-		setReviewedLinesEnabled(false);
+		setViewedLinesEnabled(false);
 
 		activeEditor.selections = [new vscode.Selection(6, 0, 6, 0)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor.selections = [new vscode.Selection(1, 0, 4, 0)];
-		await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 
 		assert.strictEqual(update.called, false);
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
@@ -131,7 +131,7 @@ describe('Reviewed line commands', function () {
 	it('clears all visible decorations when disabled and restores them when enabled without reloading', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		const secondEditor = createEditor();
 		const otherHeadEditor = createEditor(prUri('other-head'));
 		visibleEditors = [activeEditor, secondEditor, otherHeadEditor];
@@ -140,12 +140,12 @@ describe('Reviewed line commands', function () {
 		assertDecorations(secondEditor, [[1, 3]]);
 		const update = sandbox.spy(state, 'update');
 
-		setReviewedLinesEnabled(false);
+		setViewedLinesEnabled(false);
 
 		visibleEditors.forEach(editor => assertDecorations(editor, []));
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
 
-		setReviewedLinesEnabled(true);
+		setViewedLinesEnabled(true);
 
 		assertDecorations(activeEditor, [[1, 3]]);
 		assertDecorations(secondEditor, [[1, 3]]);
@@ -168,17 +168,17 @@ describe('Reviewed line commands', function () {
 	it('marks reversed selections excluding a column-zero end, and unmarks selected lines', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(4, 0, 1, 3)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
 		assertDecorations(activeEditor, [[1, 3]]);
 
 		activeEditor.selections = [new vscode.Selection(2, 0, 3, 0)];
-		await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		assert.deepStrictEqual(state.get(key), [[1, 1], [3, 3]]);
 		assertDecorations(activeEditor, [[1, 1], [3, 3]]);
 
 		activeEditor.selections = [new vscode.Selection(1, 0, 4, 0)];
-		await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		assert.strictEqual(state.get(key), undefined);
 		assertDecorations(activeEditor, []);
 	});
@@ -190,7 +190,7 @@ describe('Reviewed line commands', function () {
 			new vscode.Selection(5, 0, 7, 1),
 			new vscode.Selection(9, 4, 9, 4),
 		];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 
 		assert.deepStrictEqual(state.get(key), [[2, 2], [5, 7], [9, 9]]);
 		assertDecorations(activeEditor, [[2, 2], [5, 7], [9, 9]]);
@@ -199,12 +199,12 @@ describe('Reviewed line commands', function () {
 	it('restores persisted decorations when the controller is registered again', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(1, 0, 3, 1)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		disposeController();
 		activeEditor = createEditor();
 		visibleEditors = [activeEditor];
 
-		registerReviewedLines(context);
+		registerViewedLines(context);
 
 		assert.deepStrictEqual(state.get(key), [[1, 3]]);
 		assertDecorations(activeEditor, [[1, 3]]);
@@ -213,7 +213,7 @@ describe('Reviewed line commands', function () {
 	it('refreshes decorations for every newly visible editor and clears unsupported editors', async function () {
 		assert.ok(activeEditor);
 		activeEditor.selections = [new vscode.Selection(3, 0, 3, 0)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		const reopenedEditor = createEditor();
 		const otherHeadEditor = createEditor(prUri('other-head'));
 		const fileEditor = createEditor(vscode.Uri.file('/src/main.ts'));
@@ -237,12 +237,12 @@ describe('Reviewed line commands', function () {
 		];
 		for (const uri of unsupportedUris) {
 			activeEditor = createEditor(uri);
-			await commands.executeCommand('pr.markSelectedLinesReviewed');
-			await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+			await commands.executeCommand('pr.markSelectedLinesAsViewed');
+			await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		}
 		activeEditor = undefined;
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
-		await commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
+		await commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 
 		assert.strictEqual(update.called, false);
 	});
@@ -259,11 +259,11 @@ describe('Reviewed line commands', function () {
 		});
 
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		const first = commands.executeCommand('pr.markSelectedLinesReviewed');
+		const first = commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor.selections = [new vscode.Selection(3, 0, 3, 0)];
-		const second = commands.executeCommand('pr.markSelectedLinesReviewed');
+		const second = commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		const third = commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		const third = commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		await Promise.resolve();
 		assert.strictEqual(update.callCount, 1);
 
@@ -287,15 +287,15 @@ describe('Reviewed line commands', function () {
 		});
 
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		const first = commands.executeCommand('pr.markSelectedLinesReviewed');
+		const first = commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor.selections = [new vscode.Selection(3, 0, 3, 0)];
-		const second = commands.executeCommand('pr.markSelectedLinesReviewed');
+		const second = commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		const third = commands.executeCommand('pr.markSelectedLinesUnreviewed');
+		const third = commands.executeCommand('pr.unmarkSelectedLinesAsViewed');
 		await Promise.resolve();
 		assert.strictEqual(update.callCount, 1);
 
-		setReviewedLinesEnabled(false);
+		setViewedLinesEnabled(false);
 		releaseWrite();
 		await Promise.all([first, second, third]);
 
@@ -303,31 +303,31 @@ describe('Reviewed line commands', function () {
 		assert.deepStrictEqual(state.get(key), [[1, 1]]);
 		assertDecorations(activeEditor, []);
 
-		setReviewedLinesEnabled(true);
+		setViewedLinesEnabled(true);
 
 		assertDecorations(activeEditor, [[1, 1]]);
 	});
 
-	it('keeps reviewed lines separate for each head commit, base commit, and diff side', async function () {
+	it('keeps viewed lines separate for each head commit, base commit, and diff side', async function () {
 		assert.ok(activeEditor);
 		const headEditor = activeEditor;
 		headEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		const nextHeadEditor = createEditor(prUri('next-head'), [new vscode.Selection(4, 0, 4, 0)]);
 		const baseEditor = createEditor(prUri('head', true), [new vscode.Selection(6, 0, 6, 0)]);
 		const nextBaseEditor = createEditor(prUri('head', true, 'next-base'), [new vscode.Selection(8, 0, 8, 0)]);
 		visibleEditors = [headEditor, nextHeadEditor, baseEditor, nextBaseEditor];
 		activeEditor = nextHeadEditor;
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor = baseEditor;
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 		activeEditor = nextBaseEditor;
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 
 		assert.deepStrictEqual(state.get(key), [[1, 1]]);
-		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'next-head', 'src/main.ts', false)), [[4, 4]]);
-		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'base')), [[6, 6]]);
-		assert.deepStrictEqual(state.get(getReviewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'next-base')), [[8, 8]]);
+		assert.deepStrictEqual(state.get(getViewedLinesKey('owner/repo#1', 'next-head', 'src/main.ts', false)), [[4, 4]]);
+		assert.deepStrictEqual(state.get(getViewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'base')), [[6, 6]]);
+		assert.deepStrictEqual(state.get(getViewedLinesKey('owner/repo#1', 'head', 'src/main.ts', true, 'next-base')), [[8, 8]]);
 		assertDecorations(headEditor, [[1, 1]]);
 		assertDecorations(nextHeadEditor, [[4, 4]]);
 		assertDecorations(baseEditor, [[6, 6]]);
@@ -340,10 +340,10 @@ describe('Reviewed line commands', function () {
 		const save = state.update.bind(state);
 		sandbox.stub(state, 'update').callsFake(save).onFirstCall().rejects(failure);
 		activeEditor.selections = [new vscode.Selection(1, 0, 1, 0)];
-		await assert.rejects(commands.executeCommand('pr.markSelectedLinesReviewed'), candidate => candidate === failure);
+		await assert.rejects(commands.executeCommand('pr.markSelectedLinesAsViewed'), candidate => candidate === failure);
 
 		activeEditor.selections = [new vscode.Selection(3, 0, 3, 0)];
-		await commands.executeCommand('pr.markSelectedLinesReviewed');
+		await commands.executeCommand('pr.markSelectedLinesAsViewed');
 
 		assert.deepStrictEqual(state.get(key), [[3, 3]]);
 		assertDecorations(activeEditor, [[3, 3]]);
